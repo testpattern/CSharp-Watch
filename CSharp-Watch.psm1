@@ -21,14 +21,14 @@ function Start-CSharp-Watch([Parameter(Mandatory=$false)][string]$copytarget) {
 
     $global:robocopytarget = $copytarget
     
-    write-host "CSharp-Watch is watching for file changes..." -foregroundcolor Green
-    Write-Host "CSharp-Watch target copy path is '$global:robocopytarget'" -ForegroundColor DarkGray
+    write-host "CSharp-Watch is watching for file changes..."
+    Write-Host "CSharp-Watch target copy path is '$global:robocopytarget'"
 
     $existingEvents = get-eventsubscriber
     foreach ($item in $existingEvents) {	    
-        if ($item.SourceObject.Path -eq $global:EventSourcePath) {            
+        if ($item.SourceObject.Path -eq $global:EventSourcePath) {
             Unregister-event -SubscriptionId $item.SubscriptionId
-            write-host "Unsubscribed from: "$item.SourceObject.Path -foregroundcolor Gray
+            write-host "Unsubscribed from: "$item.SourceObject.Path
         }
     }
 
@@ -78,7 +78,8 @@ function Start-CSharp-Watch([Parameter(Mandatory=$false)][string]$copytarget) {
 
                 if ("$csproj".EndsWith(".csproj")) {
                     write-host "Ready: $newPath\$csproj"
-                    $msbuild = "C:\Program Files (x86)\MSBuild\14.0\Bin\MSBuild.exe"
+                    #$msbuild = "C:\Program Files (x86)\MSBuild\14.0\Bin\MSBuild.exe" # can't guarantee msbuild is at this location...(e.g. Win 10 doesn't have it here)
+                    $msbuild = reg.exe query "HKLM\SOFTWARE\Microsoft\MSBuild\ToolsVersions\4.0" /v MSBuildToolsPath    
                     & $msbuild ("$newPath\$csproj", "/target:Build", "/p:configuration=debug", "/verbosity:m", "/p:PostBuildEvent=") # yes, i am skipping post-build events
 
                     # we have variables to use to try copy the resulting dll, so give it a try
@@ -117,7 +118,7 @@ function Stop-CSharp-Watch() {
     ForEach ($item in $existingEvents) {	    
         if ($item.SourceObject.Path -eq $global:EventSourcePath) {            
             Unregister-event -SubscriptionId $item.SubscriptionId
-            write-host "Unsubscribed from: "$item.SourceObject.Path -foregroundcolor Gray
+            write-host "Unsubscribed from: "$item.SourceObject.Path
         }
     }
     break
