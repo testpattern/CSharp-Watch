@@ -9,20 +9,29 @@ Watches the current directory and sub-directories for changes to C-Sharp files; 
 (Optional) defines an additional target directory where the updated dll gets copied
 
 .EXAMPLE
-# Standard call, builds project file
+# Standard call, builds project
 > cd "D:\path\to\my\project"
 > D:\path\to\my\project> Start-CSharp-Watch
 > -------------------------
-# Overload, builds project file and copies dll to the supplied directory
+# Overload, builds project and copies dll to the supplied directory
 > cd "D:\path\to\my\project"
-> D:\path\to\my\project> Start-CSharp-Watch "my" "d:\path\to\my\website\bin"
+> D:\path\to\my\project> Start-CSharp-Watch "d:\path\to\my\website\bin"
 #>
 function Start-CSharp-Watch([Parameter(Mandatory=$false)][string]$copytarget) {    
 
-    $global:robocopytarget = $copytarget
-    
     write-host "CSharp-Watch is watching for file changes..."
-    Write-Host "CSharp-Watch target copy path is '$global:robocopytarget'"
+    Import-Module -Name Invoke-MsBuild
+
+    if ($copytarget) {
+        # check the parameter is valid directory
+        if ($copytarget -match "^[a-zA-Z]\:\\.+") {
+            $global:robocopytarget = $copytarget
+            Write-Host "CSharp-Watch will copy updated dlls to: '$global:robocopytarget'"
+        } 
+        else {
+            Write-Host "CSharp-Watch says, 'copytarget is an invalid path'"
+        }
+    }
 
     $existingEvents = get-eventsubscriber
     foreach ($item in $existingEvents) {	    
@@ -78,19 +87,15 @@ function Start-CSharp-Watch([Parameter(Mandatory=$false)][string]$copytarget) {
 
                 if ("$csproj".EndsWith(".csproj")) {
                     write-host "Ready: $newPath\$csproj"
-                    #$msbuild = "C:\Program Files (x86)\MSBuild\14.0\Bin\MSBuild.exe" # can't guarantee msbuild is at this location...(e.g. Win 10 doesn't have it here)
-                    $msbuild = reg.exe query "HKLM\SOFTWARE\Microsoft\MSBuild\ToolsVersions\4.0" /v MSBuildToolsPath    
-                    & $msbuild ("$newPath\$csproj", "/target:Build", "/p:configuration=debug", "/verbosity:m", "/p:PostBuildEvent=") # yes, i am skipping post-build events
+                    Invoke-MsBuild -Path "$newPath\$csproj" -Params "/target:Build /p:configuration=debug /p:PostBuildEvent= /verbosity:m"
 
-                    # we have variables to use to try copy the resulting dll, so give it a try
                     if ($global:robocopytarget) {
-                        
+                        # there's a copy target set, so copy the dll to there
                         write-host "Copying the binaries to '$global:robocopytarget'"
                         write-host "CSPROJ File directory at '$newPath'"
-                        write-host "CSPROJ File file at '$csproj'"
+                        write-host "CSPROJ File is '$csproj'"
                         $dllName = $csproj -replace ".csproj"
-                        #$currentDll = @(Get-ChildItem -Recurse "$newPath" "*$dllName*.dll")[0].FullName
-                        write-host "CURRENT DLL is called '$dllName'"
+                        write-host "CURRENT Dll is called '$dllName'"
                         robocopy "$newPath\bin" "$global:robocopytarget" "*$dllName*.dll" /NFL /NDL /NJH /nc /ns /np
                     }
                 }
@@ -123,3 +128,6 @@ function Stop-CSharp-Watch() {
     }
     break
 }
+
+Export-ModuleMember -Function Start-CSharp-Watch
+Export-ModuleMember -Function Stop-CSharp-Watch
