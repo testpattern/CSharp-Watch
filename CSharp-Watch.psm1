@@ -87,16 +87,18 @@ function Start-CSharp-Watch([Parameter(Mandatory=$false)][string]$copytarget) {
 
                 if ("$csproj".EndsWith(".csproj")) {
                     write-host "Ready: $newPath\$csproj"
-                    Invoke-MsBuild -Path "$newPath\$csproj" -Params "/target:Build /p:configuration=debug /p:PostBuildEvent= /verbosity:m"
-
-                    if ($global:robocopytarget) {
-                        # there's a copy target set, so copy the dll to there
-                        write-host "Copying the binaries to '$global:robocopytarget'"
-                        write-host "CSPROJ File directory at '$newPath'"
-                        write-host "CSPROJ File is '$csproj'"
-                        $dllName = $csproj -replace ".csproj"
-                        write-host "CURRENT Dll is called '$dllName'"
-                        robocopy "$newPath\bin" "$global:robocopytarget" "*$dllName*.dll" /NFL /NDL /NJH /nc /ns /np
+                    # should test the result and only if succeeded do the copy action
+                    $buildresult = Invoke-MsBuild -Path "$newPath\$csproj" -Params "/target:Build /p:configuration=debug /p:PostBuildEvent= /verbosity:m"
+                    if ($buildresult.BuildSucceeded) {
+                        if ($global:robocopytarget) {
+                            # there's a copy target set, so copy the dll to there
+                            write-host "Copying the binaries to '$global:robocopytarget'"
+                            write-host "CSPROJ File directory at '$newPath'"
+                            write-host "CSPROJ File is '$csproj'"
+                            $dllName = $csproj -replace ".csproj"
+                            write-host "CURRENT Dll is called '$dllName'"
+                            robocopy "$newPath\bin" "$global:robocopytarget" "*$dllName*.dll" /NFL /NDL /NJH /nc /ns /np
+                        }
                     }
                 }
             }
