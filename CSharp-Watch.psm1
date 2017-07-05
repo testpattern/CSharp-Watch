@@ -128,6 +128,3 @@ function Stop-CSharp-Watch() {
     }
     break
 }
-
-Export-ModuleMember -Function Start-CSharp-Watch
-Export-ModuleMember -Function Stop-CSharp-Watch
