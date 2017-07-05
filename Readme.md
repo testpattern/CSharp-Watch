@@ -7,4 +7,6 @@ All you need is the .psm1 file. Download it and save to a new directory in your 
 
 Or, download from [PowerShell Gallery](https://www.powershellgallery.com/packages/CSharp-Watch/1.0).
 
-See how it works: ![](https://github.com/testpattern/CSharp-Watch/blob/master/CSharp-Watch.gif)
+See how it works: ![CSharp-Watch.gif](https://github.com/testpattern/CSharp-Watch/blob/master/CSharp-Watch.gif)
+
+And the overloaded method that also copies to another location: ![CSharp-Watch-overload.gif](https://github.com/testpattern/CSharp-Watch/blob/master/CSharp-Watch-overload.gif)
