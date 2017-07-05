@@ -98,8 +98,16 @@ function Start-CSharp-Watch([Parameter(Mandatory=$false)][string]$copytarget) {
                             write-host "CSPROJ File is '$csproj'"
                             $dllName = $csproj -replace ".csproj"
                             write-host "CURRENT Dll is called '$dllName'"
-                            # it's possible that the project config 
-                            robocopy "$newPath\bin" "$global:robocopytarget" "*$dllName*.dll" /NFL /NDL /NJH /nc /ns /np
+                            # it's possible that the project config doesn't put this direct in the \bin ... but, e.g. bin\debug
+                            # this is a bit hokey, it would be nice to be able to recursively find the item...
+                            # but, there are so many possible configurations, so maybe just check bin or bin\debug for now
+                            $target = @(Get-ChildItem -Path "$newPath\bin\*$dllName*.dll")[0]
+                            if ($target){
+                                robocopy "$newPath\bin" "$global:robocopytarget" "*$dllName*.dll" /NFL /NDL /NJH /nc /ns /np
+                            }
+                            else {
+                                robocopy "$newPath\bin\Debug" "$global:robocopytarget" "*$dllName*.dll" /NFL /NDL /NJH /nc /ns /np
+                            }
                         }
                     }
                 }
