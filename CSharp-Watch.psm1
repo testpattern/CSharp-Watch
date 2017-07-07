@@ -67,7 +67,11 @@ function Start-CSharp-Watch([Parameter(Mandatory=$false)][string]$copytarget, [P
     
     Register-ObjectEvent $watcher "Changed" -Action {
         $global:FileChanged = $true
-        $global:ChangedPath = $Event.SourceEventArgs.FullPath
+        $mypath = $Event.SourceEventArgs.FullPath
+        if ($mypath -match "(\.cs~|.cs$)") {
+            $global:ChangedPath = $mypath
+            Write-Host "SET GLOBAL VALUE: $global:ChangedPath" -f Green
+        }
     } > $null
 
     While ($true){
@@ -75,25 +79,26 @@ function Start-CSharp-Watch([Parameter(Mandatory=$false)][string]$copytarget, [P
             # We need this to block the IO thread until there is something to run 
             # so the script doesn't finish. If we call the action directly from 
             # the event it won't be able to write to the console
-            Start-Sleep -Milliseconds 750
+            Start-Sleep -Milliseconds 250
         }
 
         # a file has changed, run our stuff on the I/O thread so we can see the output
-        if ("$global:ChangedPath" -match "(\.cs~|.cs$)") {
-            # this is the bit we want to happen when the file changes
-            write-host "Locating csproj file... $global:ChangedPath"
-            write-host "File was changed: '$global:ChangedPath'"                
-            
-            $testpath = (get-item $global:ChangedPath).Directory.FullName
-            $pathParts = "$testpath".Split("\\")
+        # Visual Studio creates a temp file like Code.cs~98jfiodjf.tmp
+        if ($global:ChangedPath -match "(\.cs~|.cs$)") {
+            $localchangedpath = $global:ChangedPath
+            $global:ChangedPath = "nowhere"
+            write-host "File was changed: '$localchangedpath'" -f Yellow
+            $pathParts = "$localchangedpath".Split("\\")
 
-            For ($i = $pathParts.Length; $i -gt 0; $i--) {
+            For ($i = $pathParts.Length - 2; $i -gt 0; $i--) {
                 $newPath = $pathParts[0..$i] -join "\"
-                $csproj = Get-ChildItem -path $newPath *.csproj
-                write-host "$i. trying: $newPath, csproj: $csproj"
-                if ($csproj) {
-                    write-host "Found on $i, at $newPath, $csproj"
-                    break
+                if (test-path $newPath) {
+                    $csproj = Get-ChildItem -path $newPath -filter *.csproj
+                    write-host "$i. trying: $newPath, csproj: $csproj"
+                    if ($csproj) {
+                        write-host "Found on $i, at $newPath, $csproj"
+                        break
+                    }
                 }
             }
 
@@ -141,7 +146,7 @@ function Start-CSharp-Watch([Parameter(Mandatory=$false)][string]$copytarget, [P
             }
         }
         # reset and go again
-        $global:FileChanged = $false
+        $global:FileChanged = $false 
     }
 }
 
