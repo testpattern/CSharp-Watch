@@ -8,6 +8,9 @@ Watches the current directory and sub-directories for changes to C-Sharp files; 
 .PARAMETER copytarget
 (Optional) defines an additional target directory where the updated dll gets copied
 
+.PARAMETER urltarget
+(Optional) defines a web url to hit after successful build/copy to warm up a site
+
 .EXAMPLE
 # Standard call, builds project
 > cd "D:\path\to\my\project"
