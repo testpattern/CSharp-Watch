@@ -15,9 +15,13 @@ Watches the current directory and sub-directories for changes to C-Sharp files; 
 > -------------------------
 # Overload, builds project and copies dll to the supplied directory
 > cd "D:\path\to\my\project"
-> D:\path\to\my\project> Start-CSharp-Watch "d:\path\to\my\website\bin"
+> D:\path\to\my\project> Start-CSharp-Watch -copytarget "d:\path\to\my\website\bin"
+> -------------------------
+# Overload, builds project, copies dll to the supplied directory and hits url
+> cd "D:\path\to\my\project"
+> D:\path\to\my\project> Start-CSharp-Watch -copytarget "d:\path\to\my\website\bin" -urltarget "http://localhost:50123"
 #>
-function Start-CSharp-Watch([Parameter(Mandatory=$false)][string]$copytarget) {    
+function Start-CSharp-Watch([Parameter(Mandatory=$false)][string]$copytarget, [Parameter(Mandatory=$false)][string]$urltarget) {
 
     write-host "CSharp-Watch is watching for file changes..."
     Import-Module -Name Invoke-MsBuild
@@ -25,11 +29,22 @@ function Start-CSharp-Watch([Parameter(Mandatory=$false)][string]$copytarget) {
     if ($copytarget) {
         # check the parameter is valid directory
         if ($copytarget -match "^[a-zA-Z]\:\\.+") {
-            $global:robocopytarget = $copytarget
-            Write-Host "CSharp-Watch will copy updated dlls to: '$global:robocopytarget'"
+            $global:copytarget = $copytarget
+            Write-Host "CSharp-Watch will copy updated dlls to: '$global:copytarget'"
         } 
         else {
             Write-Host "CSharp-Watch says, 'copytarget is an invalid path'"
+        }
+    }
+    
+    if ($urltarget) {
+        # check the parameter is valid directory
+        if ($urltarget -match "^http[s]?\:\/\/.+") {
+            $global:urltarget = $urltarget
+            Write-Host "CSharp-Watch will make a request after build/copy to: '$global:urltarget'"
+        } 
+        else {
+            Write-Host "CSharp-Watch says, 'urltarget is an invalid, should be in form e.g. http://localsite.me'"
         }
     }
 
@@ -60,54 +75,66 @@ function Start-CSharp-Watch([Parameter(Mandatory=$false)][string]$copytarget) {
             # We need this to block the IO thread until there is something to run 
             # so the script doesn't finish. If we call the action directly from 
             # the event it won't be able to write to the console
-            Start-Sleep -Milliseconds 100
+            Start-Sleep -Milliseconds 750
         }
+
         # a file has changed, run our stuff on the I/O thread so we can see the output
-        if ($global:ChangedPath -match "(\.cs~|.cs$)") {
+        if ("$global:ChangedPath" -match "(\.cs~|.cs$)") {
             # this is the bit we want to happen when the file changes
-            write-host "Locating csproj file..."
-            if ($global:ChangedPath) {
-                write-host "File was changed: '$global:ChangedPath'"
-                $pathParts = "$global:ChangedPath".Split("\\")
-                $end = $pathParts.Count - 1
-                $testPath = $pathParts[0..$end] -join "\"
-                write-host "Testing path $testPath"
-                $csproj = Get-ChildItem -path $testPath *.csproj
+            write-host "Locating csproj file... $global:ChangedPath"
+            write-host "File was changed: '$global:ChangedPath'"                
+            
+            $testpath = (get-item $global:ChangedPath).Directory.FullName
+            $pathParts = "$testpath".Split("\\")
 
-                For ($i = 0; $i -le 20; $i++) {
-                    $newEnd = $end - $i
-                    $newPath = $pathParts[0..$newEnd] -join "\"
-                    $csproj = Get-ChildItem -path $newPath *.csproj
-                    write-host "$i. trying: $newPath, csproj: $csproj"
-                    if ($csproj) {
-                        write-host "Found on $i, at $newPath, $csproj"
-                        break
-                    }
+            For ($i = $pathParts.Length; $i -gt 0; $i--) {
+                $newPath = $pathParts[0..$i] -join "\"
+                $csproj = Get-ChildItem -path $newPath *.csproj
+                write-host "$i. trying: $newPath, csproj: $csproj"
+                if ($csproj) {
+                    write-host "Found on $i, at $newPath, $csproj"
+                    break
                 }
+            }
 
-                if ("$csproj".EndsWith(".csproj")) {
-                    write-host "Ready: $newPath\$csproj"
-                    # should test the result and only if succeeded do the copy action
-                    $buildresult = Invoke-MsBuild -Path "$newPath\$csproj" -Params "/target:Build /p:configuration=debug /p:PostBuildEvent= /verbosity:m"
-                    if ($buildresult.BuildSucceeded) {
-                        write-host "Build was successful"
-                        if ($global:robocopytarget) {
-                            # there's a copy target set, so copy the dll to there
-                            write-host "Copying the binaries to '$global:robocopytarget'"
-                            write-host "CSPROJ File directory at '$newPath'"
-                            write-host "CSPROJ File is '$csproj'"
-                            $dllName = $csproj -replace ".csproj"
-                            write-host "CURRENT Dll is called '$dllName'"
-                            # it's possible that the project config doesn't put this direct in the \bin ... but, e.g. bin\debug
-                            # this is a bit hokey, it would be nice to be able to recursively find the item...
-                            # but, there are so many possible configurations, so maybe just check bin or bin\debug for now
-                            $target = @(Get-ChildItem -Path "$newPath\bin\*$dllName*.dll")[0]
-                            if ($target){
-                                robocopy "$newPath\bin" "$global:robocopytarget" "*$dllName*.dll" /NFL /NDL /NJH /nc /ns /np
-                            }
-                            else {
-                                robocopy "$newPath\bin\Debug" "$global:robocopytarget" "*$dllName*.dll" /NFL /NDL /NJH /nc /ns /np
-                            }
+            if ("$csproj".EndsWith(".csproj")) {
+                write-host "Ready: $newPath\$csproj"                                        
+                $buildresult = Invoke-MsBuild -Path "$newPath\$csproj" -Params "/target:Build /p:configuration=debug /p:PostBuildEvent= /verbosity:m"
+
+                if ($buildresult.BuildSucceeded) {                    
+                    write-host "Build was successful"
+
+                    if ($global:copytarget) {
+                        # there's a copy target set, so copy the dll to there
+                        write-host "Copying the binaries to '$global:copytarget'"
+                        write-host "CSPROJ File directory at '$newPath'"
+                        write-host "CSPROJ File is '$csproj'"
+                        $dllname = $csproj -replace ".csproj"
+                        write-host "CURRENT Dll is called '$dllName'"
+                        # it's possible that the project config doesn't put this direct in the \bin ... but, e.g. bin\debug
+                        # this is a bit hokey, it would be nice to be able to recursively find the item...
+                        # but, there are so many possible configurations, so just check bin or bin\debug for now
+                        $target = @(Get-ChildItem -Path "$newPath\bin\*$dllName*.dll")[0]
+                        $dllpath = ""
+                        if ($target) { 
+                            $dllpath = "$newPath\bin"
+                        } 
+                        else {
+                            $dllpath = "$newPath\bin\Debug"
+                        }                            
+                        $copyjob = start-job { robocopy "$dllpath" "$global:copytarget" "*$dllname*.dll" } -Name copyjob                            
+                        $copyjobEvent = Register-ObjectEvent $copyjob StateChanged -Action {
+                            Write-Host ('Job {0} complete (copied {1} to {2}).' -f $sender.Name, $csproj, $copytarget)
+                            $copyjobEvent | Unregister-Event
+                        }
+                    }
+
+                    if ($global:urltarget) {
+                        Write-Host "Hit uri: '$global:urltarget'"
+                        $webjob = start-job { Invoke-WebRequest -uri "$global:urltarget" -TimeoutSec 180 } -Name webjob                            
+                        $webjobevent = Register-ObjectEvent $webjob StateChanged -Action {
+                            Write-Host ('Job {0} complete (requested uri: {1}).' -f $sender.Name, $global:urltarget)
+                            $webjobevent | Unregister-Event
                         }
                     }
                 }
