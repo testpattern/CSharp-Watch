@@ -72,25 +72,23 @@ function Start-CSharp-Watch([Parameter(Mandatory=$false)][string]$copytarget, [P
         $global:FileChanged = $true
         $mypath = $Event.SourceEventArgs.FullPath
         if ($mypath -match "(\.cs~|.cs$)") {
-            $global:ChangedPath = $mypath
-            Write-Host "SET GLOBAL VALUE: $global:ChangedPath" -f Green
+            $global:ChangedPath = $mypath            
         }
     } > $null
 
-    While ($true){
+    While ($true) {
         While ($global:FileChanged -eq $false){
             # We need this to block the IO thread until there is something to run 
             # so the script doesn't finish. If we call the action directly from 
             # the event it won't be able to write to the console
             Start-Sleep -Milliseconds 250
         }
-
         # a file has changed, run our stuff on the I/O thread so we can see the output
         # Visual Studio creates a temp file like Code.cs~98jfiodjf.tmp
         if ($global:ChangedPath -match "(\.cs~|.cs$)") {
             $localchangedpath = $global:ChangedPath
             $global:ChangedPath = "nowhere"
-            write-host "File was changed: '$localchangedpath'" -f Yellow
+            write-host "File was changed: '$localchangedpath'" -f Green
             $pathParts = "$localchangedpath".Split("\\")
 
             For ($i = $pathParts.Length - 2; $i -gt 0; $i--) {
@@ -109,31 +107,38 @@ function Start-CSharp-Watch([Parameter(Mandatory=$false)][string]$copytarget, [P
                 write-host "Ready: $newPath\$csproj"                                        
                 $buildresult = Invoke-MsBuild -Path "$newPath\$csproj" -Params "/target:Build /p:configuration=debug /p:PostBuildEvent= /verbosity:m"
 
-                if ($buildresult.BuildSucceeded) {                    
+                if ($buildresult.BuildSucceeded) {
                     write-host "Build was successful"
 
-                    if ($global:copytarget) {
+                    if ($global:copytarget -and $csproj) {
                         # there's a copy target set, so copy the dll to there
                         write-host "Copying the binaries to '$global:copytarget'"
                         write-host "CSPROJ File directory at '$newPath'"
                         write-host "CSPROJ File is '$csproj'"
                         $dllname = $csproj -replace ".csproj"
-                        write-host "CURRENT Dll is called '$dllName'"
+                        write-host "CURRENT Dll is called '$newPath\bin\*$dllName*.dll'"
                         # it's possible that the project config doesn't put this direct in the \bin ... but, e.g. bin\debug
                         # this is a bit hokey, it would be nice to be able to recursively find the item...
                         # but, there are so many possible configurations, so just check bin or bin\debug for now
-                        $target = @(Get-ChildItem -Path "$newPath\bin\*$dllName*.dll")[0]
+                        $target = @(Get-ChildItem -Path "$newPath\bin\" -Name "*$dllName*.dll" -Recurse)[0]
                         $dllpath = ""
-                        if ($target) { 
+
+                        if ($target) {
                             $dllpath = "$newPath\bin"
-                        } 
+                        }
                         else {
                             $dllpath = "$newPath\bin\Debug"
-                        }                            
-                        $copyjob = start-job { robocopy "$dllpath" "$global:copytarget" "*$dllname*.dll" } -Name copyjob                            
-                        $copyjobEvent = Register-ObjectEvent $copyjob StateChanged -Action {
-                            Write-Host ('Job {0} complete (copied {1} to {2}).' -f $sender.Name, $csproj, $copytarget)
-                            $copyjobEvent | Unregister-Event
+                        }
+
+                        $copyjob = start-job -Name copyjob -ScriptBlock {
+                            param([string]$dllsource, [string]$pdbsource, [string]$target)
+                                xcopy $dllsource $target /Y
+                                xcopy $pdbsource $target /Y
+                        } -ArgumentList @("$dllpath\*$dllname*.dll", "$dllpath\*$dllname*.pdb", "$global:copytarget")
+
+                        $copyjobevent = Register-ObjectEvent $copyjob StateChanged -Action {
+                            Write-Host ('Job {0} complete (copy files)' -f $sender.Id)
+                            $copyjobevent | Unregister-Event
                         }
                     }
 
@@ -170,7 +175,7 @@ function Stop-CSharp-Watch() {
     ForEach ($item in $existingEvents) {	    
         if ($item.SourceObject.Path -eq $global:EventSourcePath) {            
             Unregister-event -SubscriptionId $item.SubscriptionId
-            write-host "Unsubscribed from: "$item.SourceObject.Path
+            write-host "Unsubscribed from: '$item.SourceObject.Path'"
         }
     }
     break
