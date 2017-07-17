@@ -117,13 +117,10 @@ function Start-CSharp-Watch([Parameter(Mandatory=$false)][string]$copytarget, [P
                         write-host "CSPROJ File is '$csproj'"
                         $dllname = $csproj -replace ".csproj"
                         write-host "CURRENT Dll is called '$newPath\bin\*$dllName*.dll'"
-                        # it's possible that the project config doesn't put this direct in the \bin ... but, e.g. bin\debug
-                        # this is a bit hokey, it would be nice to be able to recursively find the item...
-                        # but, there are so many possible configurations, so just check bin or bin\debug for now
                         # pretty much hoping that first result will the be the right one!
                         $targetdll = @(Get-ChildItem -Path "$newPath" -Name "*$dllName*.dll" -Recurse)[0]
                         $targetpdb = @(Get-ChildItem -Path "$newPath" -Name "*$dllName*.pdb" -Recurse)[0]
-                        write-host "Target dll is at '$newPath\$targetdll'... Target pdb is at '$newPath\$targetpdb'"
+                        write-host "Target dll is at '$newPath\$targetdll' ... Target pdb is at '$newPath\$targetpdb'"
                         
                         $copyjob = start-job -Name copyjob -ScriptBlock {
                             param([string]$dllsource, [string]$pdbsource, [string]$target)
@@ -131,8 +128,8 @@ function Start-CSharp-Watch([Parameter(Mandatory=$false)][string]$copytarget, [P
                                 xcopy $pdbsource $target /Y
                         } -ArgumentList @("$newPath\$targetdll", "$newPath\$targetpdb", "$global:copytarget")
 
-                        $copyjobevent = Register-ObjectEvent $copyjob StateChanged -Action {
-                            Write-Host ('Job {0} complete (copy files)' -f $sender.Id)
+                        $copyjobevent = Register-ObjectEvent $copyjob StateChanged -MessageData "$newpath\$targetdll" -Action {
+                            Write-Host ('Job {0} complete (copy from {1} to {2})' -f $sender.Name, $Event.MessageData, $global:copytarget)
                             $copyjobevent | Unregister-Event
                         }
                     }
