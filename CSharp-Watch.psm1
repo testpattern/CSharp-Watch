@@ -108,7 +108,7 @@ function Start-CSharp-Watch([Parameter(Mandatory=$false)][string]$copytarget, [P
                 $buildresult = Invoke-MsBuild -Path "$newPath\$csproj" -Params "/target:Build /p:configuration=debug /p:PostBuildEvent= /verbosity:m"
 
                 if ($buildresult.BuildSucceeded) {
-                    write-host "Build was successful"
+                    write-host "Build was successful"@(get-date -Format u) -ForegroundColor Green
 
                     if ($global:copytarget -and $csproj) {
                         # there's a copy target set, so copy the dll to there
@@ -129,7 +129,7 @@ function Start-CSharp-Watch([Parameter(Mandatory=$false)][string]$copytarget, [P
                         } -ArgumentList @("$newPath\$targetdll", "$newPath\$targetpdb", "$global:copytarget")
 
                         $copyjobevent = Register-ObjectEvent $copyjob StateChanged -MessageData "$newpath\$targetdll" -Action {
-                            Write-Host ('Job {0} complete (copy from {1} to {2})' -f $sender.Name, $Event.MessageData, $global:copytarget)
+                            Write-Host ('Job {0} complete (copy from {1} to {2})' -f $sender.Name, $Event.MessageData, $global:copytarget) -ForegroundColor DarkYellow
                             $copyjobevent | Unregister-Event
                         }
                     }
@@ -138,7 +138,7 @@ function Start-CSharp-Watch([Parameter(Mandatory=$false)][string]$copytarget, [P
                         Write-Host "Hit uri: '$global:urltarget'"
                         $webjob = start-job { Invoke-WebRequest -uri "$global:urltarget" -TimeoutSec 180 } -Name webjob                            
                         $webjobevent = Register-ObjectEvent $webjob StateChanged -Action {
-                            Write-Host ('Job {0} complete (requested uri: {1}).' -f $sender.Name, $global:urltarget)
+                            Write-Host ('Job {0} complete (requested uri: {1}).' -f $sender.Name, $global:urltarget) -ForegroundColor DarkYellow
                             $webjobevent | Unregister-Event
                         }
                     }
